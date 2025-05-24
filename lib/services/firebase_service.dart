@@ -104,89 +104,89 @@ class FirebaseService {
     });
   }
 
-  Future<void> playCard(String roomCode, CardModel card) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Authentication required');
+  // Future<void> playCard(String roomCode, CardModel card) async {
+  //   final user = _auth.currentUser;
+  //   if (user == null) throw Exception('Authentication required');
 
-    await _firestore.runTransaction((transaction) async {
-      final docRef = _firestore.collection('game_rooms').doc(roomCode);
-      final doc = await transaction.get(docRef);
+  //   await _firestore.runTransaction((transaction) async {
+  //     final docRef = _firestore.collection('game_rooms').doc(roomCode);
+  //     final doc = await transaction.get(docRef);
 
-      _validatePlayerTurn(doc, user.uid);
+  //     _validatePlayerTurn(doc, user.uid);
 
-      final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
-        (key, value) => MapEntry(
-          key, 
-          (value as List).map((e) => CardModel.fromJson(e)).toList()
-        ),
-      );
-      final playedCards = List<Map<String, dynamic>>.from(doc['playedCards'] ?? []);
-      final isFirstRound = doc['isFirstRound'] ?? true;
-      final leadSuit = playedCards.isNotEmpty ? 
-          CardModel.fromJson(playedCards.first).suit : null;
+  //     final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
+  //       (key, value) => MapEntry(
+  //         key, 
+  //         (value as List).map((e) => CardModel.fromJson(e)).toList()
+  //       ),
+  //     );
+  //     final playedCards = List<Map<String, dynamic>>.from(doc['playedCards'] ?? []);
+  //     final isFirstRound = doc['isFirstRound'] ?? true;
+  //     final leadSuit = playedCards.isNotEmpty ? 
+  //         CardModel.fromJson(playedCards.first).suit : null;
 
-      final currentHand = playerCards[user.uid] ?? [];
-      if (!BhabhiGameLogic.isValidPlay(
-        currentHand: currentHand,
-        cardToPlay: card,
-        leadSuit: leadSuit,
-        isFirstRound: isFirstRound,
-      )) {
-        throw Exception('Invalid card play');
-      }
+  //     final currentHand = playerCards[user.uid] ?? [];
+  //     if (!BhabhiGameLogic.isValidPlay(
+  //       currentHand: currentHand,
+  //       cardToPlay: card,
+  //       leadSuit: leadSuit,
+  //       isFirstRound: isFirstRound,
+  //     )) {
+  //       throw Exception('Invalid card play');
+  //     }
 
-      playerCards[user.uid] = currentHand.where(
-        (c) => !(c.code == card.code && c.suit == card.suit)
-      ).toList();
+  //     playerCards[user.uid] = currentHand.where(
+  //       (c) => !(c.code == card.code && c.suit == card.suit)
+  //     ).toList();
 
-      playedCards.add(card.toJson());
+  //     playedCards.add(card.toJson());
 
-      final playerOrder = List<String>.from(doc['players']);
-      final currentTurn = doc['currentTurn'] as int;
-      final nextTurn = (currentTurn + 1) % playerOrder.length;
-      final roundComplete = nextTurn == (doc['currentRoundStarter'] ?? 0);
+  //     final playerOrder = List<String>.from(doc['players']);
+  //     final currentTurn = doc['currentTurn'] as int;
+  //     final nextTurn = (currentTurn + 1) % playerOrder.length;
+  //     final roundComplete = nextTurn == (doc['currentRoundStarter'] ?? 0);
 
-      final updates = <String, dynamic>{
-        'playerCards.${user.uid}': playerCards[user.uid]!.map((c) => c.toJson()).toList(),
-        'playedCards': playedCards,
-        'currentTurn': nextTurn,
-      };
+  //     final updates = <String, dynamic>{
+  //       'playerCards.${user.uid}': playerCards[user.uid]!.map((c) => c.toJson()).toList(),
+  //       'playedCards': playedCards,
+  //       'currentTurn': nextTurn,
+  //     };
 
-      if (roundComplete as bool) {
-        final playedCardsModels = playedCards.map((e) => CardModel.fromJson(e)).toList();
-        final discardPile = List<CardModel>.from(
-          (doc['discardPile'] as List).map((e) => CardModel.fromJson(e)));
+  //     if (roundComplete as bool) {
+  //       final playedCardsModels = playedCards.map((e) => CardModel.fromJson(e)).toList();
+  //       final discardPile = List<CardModel>.from(
+  //         (doc['discardPile'] as List).map((e) => CardModel.fromJson(e)));
         
-        final roundWinner = BhabhiGameLogic.determineRoundWinner(
-          playedCards: Map.fromIterables(
-            playerOrder, 
-            playedCardsModels,
-          ),
-          leadPlayerId: playerOrder[doc['currentRoundStarter'] ?? 0],
-          leadSuit: leadSuit,
-          isFirstRound: isFirstRound,
-        );
+  //       final roundWinner = BhabhiGameLogic.determineRoundWinner(
+  //         playedCards: Map.fromIterables(
+  //           playerOrder, 
+  //           playedCardsModels,
+  //         ),
+  //         leadPlayerId: playerOrder[doc['currentRoundStarter'] ?? 0],
+  //         leadSuit: leadSuit,
+  //         isFirstRound: isFirstRound,
+  //       );
 
-        if (roundWinner != null) {
-          final roundUpdates = BhabhiGameLogic.processRoundEnd(
-            playerCards: playerCards,
-            playedCards: playedCardsModels,
-            roundWinnerId: roundWinner,
-            isFirstRound: isFirstRound,
-            discardPile: discardPile,
-          );
-          updates.addAll(roundUpdates);
-        }
+  //       if (roundWinner != null) {
+  //         final roundUpdates = BhabhiGameLogic.processRoundEnd(
+  //           playerCards: playerCards,
+  //           playedCards: playedCardsModels,
+  //           roundWinnerId: roundWinner,
+  //           isFirstRound: isFirstRound,
+  //           discardPile: discardPile,
+  //         );
+  //         updates.addAll(roundUpdates);
+  //       }
 
-        if (BhabhiGameLogic.checkGameEnd(playerCards)) {
-          updates['gameStatus'] = 'ended';
-          updates['endedAt'] = FieldValue.serverTimestamp();
-        }
-      }
+  //       if (BhabhiGameLogic.checkGameEnd(playerCards)) {
+  //         updates['gameStatus'] = 'ended';
+  //         updates['endedAt'] = FieldValue.serverTimestamp();
+  //       }
+  //     }
 
-      transaction.update(docRef, updates);
-    });
-  }
+  //     transaction.update(docRef, updates);
+  //   });
+  // }
 
   Future<void> drawCard(String roomCode, {int count = 1}) async {
     final user = _auth.currentUser;
@@ -214,36 +214,36 @@ class FirebaseService {
     });
   }
 
-  Future<void> swapHands(String roomCode) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Authentication required');
+  // Future<void> swapHands(String roomCode) async {
+  //   final user = _auth.currentUser;
+  //   if (user == null) throw Exception('Authentication required');
 
-    await _firestore.runTransaction((transaction) async {
-      final docRef = _firestore.collection('game_rooms').doc(roomCode);
-      final doc = await transaction.get(docRef);
+  //   await _firestore.runTransaction((transaction) async {
+  //     final docRef = _firestore.collection('game_rooms').doc(roomCode);
+  //     final doc = await transaction.get(docRef);
 
-      if (doc['status'] != 'started') throw Exception('Game not active');
-      if (doc['playedCards'] != null && (doc['playedCards'] as List).isNotEmpty) {
-        throw Exception('Cannot swap hands during a round');
-      }
+  //     if (doc['status'] != 'started') throw Exception('Game not active');
+  //     if (doc['playedCards'] != null && (doc['playedCards'] as List).isNotEmpty) {
+  //       throw Exception('Cannot swap hands during a round');
+  //     }
 
-      final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
-        (key, value) => MapEntry(
-          key, 
-          (value as List).map((e) => CardModel.fromJson(e)).toList()
-        ),
-      );
-      final playerOrder = List<String>.from(doc['players']);
+  //     final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
+  //       (key, value) => MapEntry(
+  //         key, 
+  //         (value as List).map((e) => CardModel.fromJson(e)).toList()
+  //       ),
+  //     );
+  //     final playerOrder = List<String>.from(doc['players']);
 
-      final updates = BhabhiGameLogic.processHandSwap(
-        playerCards: playerCards,
-        currentPlayerId: user.uid,
-        playerOrder: playerOrder,
-      );
+  //     final updates = BhabhiGameLogic.processHandSwap(
+  //       playerCards: playerCards,
+  //       currentPlayerId: user.uid,
+  //       playerOrder: playerOrder,
+  //     );
 
-      transaction.update(docRef, updates);
-    });
-  }
+  //     transaction.update(docRef, updates);
+  //   });
+  // }
 
   void _validatePlayerTurn(DocumentSnapshot doc, String uid) {
     if (doc['status'] != 'started') throw Exception('Game not active');
