@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "540566410414",
+    "firebase_url": "https://bhabhi-b70b9-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "bhabhi-b70b9",
+    "storage_bucket": "bhabhi-b70b9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:540566410414:android:2d2f371eaf8142652b493f",
+        "android_client_info": {
+          "package_name": "com.example.bhabi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWE3NwmCeYGW1yfu512KWhuIzZ5i5Q1_U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
