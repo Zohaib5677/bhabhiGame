@@ -1,4 +1,3 @@
-// screens/lobby_screen.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/firebase_service.dart';
@@ -43,7 +42,19 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
           final roomData = snapshot.data!.data() as Map<String, dynamic>;
           final players = List<String>.from(roomData['players'] ?? []);
-          final maxPlayers = roomData['maxPlayers'] ?? 6; // Default to 6 if not set
+          final maxPlayers = roomData['maxPlayers'] ?? 6;
+          final gameStatus = roomData['gameStatus'] as String?;
+
+          // 🚀 Auto-navigate to GameScreen if game has started
+          if (gameStatus == 'active') {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => GameScreen(roomCode: widget.roomCode),
+              ));
+            });
+          }
 
           return Column(
             children: [
