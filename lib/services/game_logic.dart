@@ -114,27 +114,34 @@ class BhabhiGameLogic {
   }
 
   /// Handles hand swap between current player and player to their left
-  static Map<String, dynamic> processHandSwap({
-    required Map<String, List<CardModel>> playerCards,
-    required String currentPlayerId,
-    required List<String> playerOrder,
-  }) {
-    final currentPlayerIndex = playerOrder.indexOf(currentPlayerId);
-    final leftPlayerIndex = (currentPlayerIndex + 1) % playerOrder.length;
-    final leftPlayerId = playerOrder[leftPlayerIndex];
+static Map<String, dynamic> processHandSwap({
+  required Map<String, List<CardModel>> playerCards,
+  required String currentPlayerId,
+  required List<String> playerOrder,
+}) {
+  final currentPlayerIndex = playerOrder.indexOf(currentPlayerId);
+  final leftPlayerIndex = (currentPlayerIndex + 1) % playerOrder.length;
+  final leftPlayerId = playerOrder[leftPlayerIndex];
 
-    final tempHand = playerCards[currentPlayerId];
-    playerCards[currentPlayerId] = playerCards[leftPlayerId] ?? [];
-    playerCards[leftPlayerId] = tempHand ?? [];
+  // Current player takes all cards from left player
+  playerCards[currentPlayerId] = [
+    ...playerCards[currentPlayerId] ?? [],
+    ...playerCards[leftPlayerId] ?? []
+  ];
+  
+  // Left player's hand becomes empty and they become winner
+  playerCards[leftPlayerId] = [];
 
-   return {
-  'playerCards': playerCards.map(
-    (key, value) => MapEntry(key, value.map((c) => c.toJson()).toList()),
-  ),
-  'lastAction': 'hand_swap',
-  'lastActionPlayer': currentPlayerId,
-};
-  }
+  return {
+    'playerCards': playerCards.map(
+      (key, value) => MapEntry(key, value.map((c) => c.toJson()).toList()),
+    ),
+    'lastAction': 'hand_swap',
+    'lastActionPlayer': currentPlayerId,
+    'roundWinner': leftPlayerId,  // The player who lost their hand wins
+    'gameStatus': 'round_end',    // May need to handle round transition
+  };
+}
 
   /// Checks if game has ended (only one player with cards left)
   static bool checkGameEnd(Map<String, List<CardModel>> playerCards) {

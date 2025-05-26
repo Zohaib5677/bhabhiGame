@@ -213,36 +213,41 @@ class FirebaseService {
   }
 
   Future<void> swapHands(String roomCode) async {
-    final user = _auth.currentUser;
-    if (user == null) throw Exception('Authentication required');
+  final user = _auth.currentUser;
+  if (user == null) throw Exception('Authentication required');
 
-    await _firestore.runTransaction((transaction) async {
-      final docRef = _firestore.collection('game_rooms').doc(roomCode);
-      final doc = await transaction.get(docRef);
+  await _firestore.runTransaction((transaction) async {
+    final docRef = _firestore.collection('game_rooms').doc(roomCode);
+    final doc = await transaction.get(docRef);
 
-      if (doc['status'] != 'started') throw Exception('Game not active');
-      if ((doc['playedCards'] as List).isNotEmpty) {
-        throw Exception('Cannot swap hands during a round');
-      }
+    if (doc['status'] != 'started') throw Exception('Game not active');
+    if ((doc['playedCards'] as List).isNotEmpty) {
+      throw Exception('Cannot swap hands during a round');
+    }
 
-      final players = List<String>.from(doc['players']);
-      final playerCards = (doc['playerCards'] as Map<String, dynamic>).map(
-        (key, value) => MapEntry(
-          key, 
-          (value as List).map((e) => CardModel.fromJson(e)).toList()
-        ),
-      );
+    final players = List<String>.from(doc['players']);
+    final playerCards = (doc['playerCards'] as Map<String, dynamic>).map(
+      (key, value) => MapEntry(
+        key, 
+        (value as List).map((e) => CardModel.fromJson(e)).toList()
+      ),
+    );
 
-      final updates =BhabhiGameLogic.processHandSwap(
-        playerCards: playerCards,
-        currentPlayerId: user.uid,
-        playerOrder: players,
-      );
+    final updates = BhabhiGameLogic.processHandSwap(
+      playerCards: playerCards,
+      currentPlayerId: user.uid,
+      playerOrder: players,
+    );
 
-      transaction.update(docRef, updates);
-    });
-  }
+    // Additional checks for game end conditions
+    if (playerCards[updates['roundWinner']]?.isEmpty ?? false) {
+      updates['gameStatus'] = 'ended';
+      updates['winner'] = updates['roundWinner'];
+    }
 
+    transaction.update(docRef, updates);
+  });
+}
   Future<void> processShootOutResponse({
     required String roomCode,
     required CardModel playedCard,
