@@ -336,6 +336,36 @@ class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin
         final players = List<String>.from(roomData['players'] ?? []);
         final maxPlayers = roomData['maxPlayers'] ?? 6;
 
+        // Check if game has started and navigate all players to game screen
+        final gameStatus = roomData['status'] as String?;
+        if (gameStatus == 'started' && mounted) {
+          // Use a post-frame callback to avoid calling navigation during build
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                PageRouteBuilder(
+                  pageBuilder: (context, animation, secondaryAnimation) =>
+                      GameScreen(roomCode: widget.roomCode),
+                  transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(1.0, 0.0),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(
+                        parent: animation,
+                        curve: Curves.easeInOut,
+                      )),
+                      child: child,
+                    );
+                  },
+                  transitionDuration: const Duration(milliseconds: 300),
+                ),
+              );
+            }
+          });
+        }
+
         return Column(
           children: [
             // Players header
@@ -608,9 +638,7 @@ class _LobbyScreenState extends State<LobbyScreen> with TickerProviderStateMixin
 
   void _startGame() {
     _firebaseService.startGame(widget.roomCode);
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => GameScreen(roomCode: widget.roomCode)),
-    );
+    // Navigation will be handled automatically by the StreamBuilder
+    // when it detects the game status change to 'started'
   }
 }

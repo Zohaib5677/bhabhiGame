@@ -297,41 +297,33 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> with TickerProvider
                 const SizedBox(height: 40),
                 
                 // Create button
-                AnimatedBuilder(
-                  animation: _pulseController,
-                  builder: (context, child) {
-                    return Transform.scale(
-                      scale: 1.0 + (_pulseController.value * 0.05),
-                      child: SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          onPressed: _isCreating ? null : () => _createRoom(context),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFFE94560),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                            elevation: 8,
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.add_circle, size: 24),
-                              SizedBox(width: 12),
-                              Text(
-                                'Create Room',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                SizedBox(
+                  width: double.infinity,
+                  height: 55,
+                  child: ElevatedButton(
+                    onPressed: _isCreating ? null : () => _createRoom(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFE94560),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      elevation: 8,
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.add_circle, size: 24),
+                        SizedBox(width: 12),
+                        Text(
+                          'Create Room',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ),
-                    );
-                  },
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),
