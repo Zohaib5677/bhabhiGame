@@ -1,9 +1,11 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
-import 'package:bhabi/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:bhabi/services/auth_service.dart';
 import './screens/home_page.dart';
-import './screens/login_page.dart';
+import './screens/splash_screen.dart';
+import './screens/login_screen.dart';
 import './screens/create_room_screen.dart';
 import './screens/join_room_screen.dart';
 import './screens/lobby_screen.dart';
@@ -32,51 +34,63 @@ void main() async {
 }
 
 class MyApp extends StatelessWidget {
-  final AuthService _authService = AuthService();
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Bhabhi Card Game',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
+        primaryColor: const Color(0xFF1A1F38),
+        scaffoldBackgroundColor: const Color(0xFF0A0E21),
+        fontFamily: 'Poppins',
+        textTheme: const TextTheme(
+          headlineMedium: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 28,
+          ),
+          headlineSmall: TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 20,
+          ),
+          bodyMedium: TextStyle(color: Colors.white70),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFFE94560),
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+            textStyle: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        cardTheme: CardTheme(
+          color: const Color(0xFF2A2F4F),
+          elevation: 8,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+        ),
       ),
-      home: StreamBuilder<User?>(
-        stream: _authService.authStateChanges,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(
-                child: CircularProgressIndicator(),
-              ),
-            );
-          }
-
-          if (snapshot.hasError) {
-            return Scaffold(
-              body: Center(
-                child: Text('Authentication error: ${snapshot.error}'),
-              ),
-            );
-          }
-
-          return snapshot.hasData ?  HomePage() :  LoginPage();
-        },
-      ),
+      home: const SplashScreen(),
       routes: {
-        '/home': (context) => HomePage(),
-        '/login': (context) => LoginPage(),
-        '/create': (context) =>  CreateRoomScreen(),
-        '/join': (context) =>  JoinRoomScreen(),
+        '/login': (context) => LoginScreen(),
+        '/home': (context) =>  HomePage(),
+        '/create': (context) => CreateRoomScreen(),
+        '/join': (context) => JoinRoomScreen(),
         '/lobby': (context) => LobbyScreen(
               roomCode: ModalRoute.of(context)!.settings.arguments as String,
               isHost: false,
             ),
-            '/game': (context) => GameScreen(
-        roomCode: ModalRoute.of(context)!.settings.arguments as String,
-      ),
+        '/game': (context) => GameScreen(
+              roomCode: ModalRoute.of(context)!.settings.arguments as String,
+            ),
       },
     );
   }
