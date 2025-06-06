@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:bhabi/services/auth_service.dart';
 import 'dart:math';
+
 class HomePage extends StatefulWidget {
   final AuthService _authService = AuthService();
 
@@ -20,7 +21,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       vsync: this,
       duration: const Duration(seconds: 30),
     )..repeat();
-    
     // Initialize dots
     for (int i = 0; i < _dotCount; i++) {
       _dots.add(Dot());
@@ -44,7 +44,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E21),
       body: SafeArea(
@@ -68,7 +67,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                 ),
               ),
             ),
-            
             // Content
             Padding(
               padding: const EdgeInsets.all(20.0),
@@ -95,18 +93,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         ],
                       ),
                       IconButton(
-                        icon: const Icon(Icons.logout, color: Colors.white70),
+                        icon: const Icon(Icons.logout, color: Colors.white),
                         onPressed: () async {
                           await widget._authService.signOut();
+                          Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
                         },
                       ),
                     ],
                   ),
                   const SizedBox(height: 30),
-                  
                   // Welcome Message
                   const Text(
-                    'Welcome Back,',
+                    'Welcome',
                     style: TextStyle(
                       color: Colors.white70,
                       fontSize: 16,
@@ -122,7 +120,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     ),
                   ),
                   const SizedBox(height: 40),
-                  
                   // Compact Game Cards
                   Center(
                     child: SizedBox(
@@ -132,7 +129,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         children: [
                           _CompactGameCard(
                             icon: Icons.add_circle_outline,
-                            title: "New Game",
+                            title: "Create Game",
                             description: "Start a fresh card table",
                             color: const Color(0xFFE94560),
                             onTap: () => Navigator.pushNamed(context, '/create'),
@@ -140,18 +137,16 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           const SizedBox(height: 20),
                           _CompactGameCard(
                             icon: Icons.people_alt_outlined,
-                            title: "Find Game",
+                            title: "Join Game",
                             description: "Join existing tables",
                             color: const Color(0xFF2A2F4F),
-                            onTap: () => Navigator.pushNamed(context, '/lobby'),
+                            onTap: () => Navigator.pushNamed(context, '/join'),
                           ),
                         ],
                       ),
                     ),
                   ),
-                  
                   const Spacer(),
-                  
                   // Footer
                   const Center(
                     child: Text(
@@ -223,7 +218,7 @@ class _CompactGameCard extends StatelessWidget {
                 child: Icon(
                   icon,
                   size: 24,
-                  color: color,
+                  color: Colors.white, // 🔴 White Icon (only inside the card)
                 ),
               ),
               const SizedBox(width: 15),
@@ -252,7 +247,7 @@ class _CompactGameCard extends StatelessWidget {
               ),
               Icon(
                 Icons.chevron_right,
-                color: color,
+                color: Colors.white, // 🔴 Right arrow also white
               ),
             ],
           ),
@@ -262,6 +257,7 @@ class _CompactGameCard extends StatelessWidget {
   }
 }
 
+// Dot class and DotPainter class unchanged
 class Dot {
   Offset position = Offset.zero;
   double size = 0;
@@ -290,7 +286,6 @@ class Dot {
     final dx = (pointerPosition.dx - position.dx * 1000) / 1000;
     final dy = (pointerPosition.dy - position.dy * 1000) / 1000;
     final distance = sqrt(dx * dx + dy * dy);
-    
     if (distance < 0.3) {
       size = baseSize * 3;
       position = Offset(
@@ -324,7 +319,6 @@ class DotPainter extends CustomPainter {
       final paint = Paint()
         ..color = dot.color
         ..style = PaintingStyle.fill;
-      
       canvas.drawCircle(
         Offset(dot.position.dx * size.width, dot.position.dy * size.height),
         dot.size,
