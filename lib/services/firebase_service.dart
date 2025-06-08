@@ -100,6 +100,9 @@ class FirebaseService {
         'currentTurn': 0,
         'remainingCards': 0,
         'discardPile': [],
+        'isFirstRound': true,
+        'playedCards': [],
+        'currentRoundStarter': 0,
       });
     });
   }
@@ -112,7 +115,19 @@ class FirebaseService {
       final docRef = _firestore.collection('game_rooms').doc(roomCode);
       final doc = await transaction.get(docRef);
 
-      _validatePlayerTurn(doc, user.uid);
+      // Special handling for Ace of Spades in first round
+      final isFirstRound = doc['isFirstRound'] ?? true;
+      final playedCards = List<dynamic>.from(doc['playedCards'] ?? []);
+      final isAceOfSpades = card.code == 'AS' || (card.value == 'ACE' && card.suit == 'SPADES');
+      final isFirstCardOfGame = isFirstRound && playedCards.isEmpty;
+      
+      // Allow Ace of Spades to be played first, otherwise validate turn
+      if (!isFirstCardOfGame || !isAceOfSpades) {
+        _validatePlayerTurn(doc, user.uid);
+      } else {
+        // For first Ace of Spades play, just validate game is active
+        if (doc['status'] != 'started') throw Exception('Game not active');
+      }
 
       final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
         (key, value) => MapEntry(
@@ -120,8 +135,6 @@ class FirebaseService {
           (value as List).map((e) => CardModel.fromJson(e)).toList()
         ),
       );
-      final playedCards = List<Map<String, dynamic>>.from(doc['playedCards'] ?? []);
-      final isFirstRound = doc['isFirstRound'] ?? true;
       final leadSuit = playedCards.isNotEmpty ? 
           CardModel.fromJson(playedCards.first).suit : null;
 
@@ -143,26 +156,66 @@ class FirebaseService {
 
       final playerOrder = List<String>.from(doc['players']);
       final currentTurn = doc['currentTurn'] as int;
-      final nextTurn = (currentTurn + 1) % playerOrder.length;
-      final roundComplete = nextTurn == (doc['currentRoundStarter'] ?? 0);
+      
+      // For Ace of Spades first play, set the current turn to the player who played it
+      final nextTurn = isFirstCardOfGame && isAceOfSpades 
+          ? (playerOrder.indexOf(user.uid) + 1) % playerOrder.length
+          : (currentTurn + 1) % playerOrder.length;
+      
+      // Get the round starter - either existing or the current player if first card
+      final currentRoundStarter = isFirstCardOfGame 
+          ? playerOrder.indexOf(user.uid)
+          : (doc['currentRoundStarter'] as int? ?? 0);
+      
+      // Check if round should end early due to someone not following suit
+      // This happens when a player plays out of suit but they DO have cards of the lead suit
+      // (which means they chose not to follow suit)
+      final shouldEndRoundEarly = !isFirstRound && 
+          leadSuit != null && 
+          card.suit != leadSuit && 
+          currentHand.any((c) => c.suit == leadSuit);
+      
+      // Actually, let me correct this: if someone can't follow suit (has no cards of that suit),
+      // they play any card and play stops immediately
+      final cantFollowSuit = !isFirstRound && 
+          leadSuit != null && 
+          card.suit != leadSuit && 
+          !currentHand.any((c) => c.suit == leadSuit);
+      
+      // Check if round is complete 
+      // For first round: all players must play
+      // For regular rounds: all players play OR someone can't follow suit (stops early)
+      final roundComplete = cantFollowSuit || 
+          (playedCards.length >= playerOrder.length && 
+           nextTurn == currentRoundStarter);
 
       final updates = <String, dynamic>{
         'playerCards.${user.uid}': playerCards[user.uid]!.map((c) => c.toJson()).toList(),
         'playedCards': playedCards,
-        'currentTurn': nextTurn,
+        'currentTurn': cantFollowSuit ? nextTurn : nextTurn, // Keep current logic for now
       };
 
-      if (roundComplete as bool) {
+      // Set the round starter if this is the first card
+      if (isFirstCardOfGame) {
+        updates['currentRoundStarter'] = currentRoundStarter;
+      }
+
+      if (roundComplete) {
         final playedCardsModels = playedCards.map((e) => CardModel.fromJson(e)).toList();
         final discardPile = List<CardModel>.from(
           (doc['discardPile'] as List).map((e) => CardModel.fromJson(e)));
         
+        // Create proper mapping of players to their played cards
+        // Each player plays one card in order starting from round starter
+        final playedCardsMap = <String, CardModel>{};
+        for (int i = 0; i < playedCardsModels.length; i++) {
+          final playerIndex = (currentRoundStarter + i) % playerOrder.length;
+          playedCardsMap[playerOrder[playerIndex]] = playedCardsModels[i];
+        }
+        
         final roundWinner = BhabhiGameLogic.determineRoundWinner(
-          playedCards: Map.fromIterables(
-            playerOrder, 
-            playedCardsModels,
-          ),
-          leadPlayerId: playerOrder[doc['currentRoundStarter'] ?? 0],
+          playedCards: playedCardsMap,
+          leadPlayerId: playerOrder[currentRoundStarter],
           leadSuit: leadSuit,
           isFirstRound: isFirstRound,
         );
@@ -174,6 +227,7 @@ class FirebaseService {
             roundWinnerId: roundWinner,
             isFirstRound: isFirstRound,
             discardPile: discardPile,
+            playerOrder: playerOrder,
           );
           updates.addAll(roundUpdates);
         }
@@ -181,6 +235,27 @@ class FirebaseService {
         if (BhabhiGameLogic.checkGameEnd(playerCards)) {
           updates['gameStatus'] = 'ended';
           updates['endedAt'] = FieldValue.serverTimestamp();
+          
+          // Determine winner and bhabhi
+          final playersWithCards = playerCards.entries
+              .where((entry) => entry.value.isNotEmpty)
+              .toList();
+          
+          if (playersWithCards.isEmpty) {
+            // Everyone finished at the same time - last player to finish wins
+            updates['winner'] = roundWinner;
+          } else if (playersWithCards.length == 1) {
+            // One player left with cards - they are the bhabhi
+            updates['bhabhi'] = playersWithCards.first.key;
+            // Winner is the player who just finished their cards
+            final finishedPlayers = playerCards.entries
+                .where((entry) => entry.value.isEmpty)
+                .map((entry) => entry.key)
+                .toList();
+            if (finishedPlayers.isNotEmpty) {
+              updates['winner'] = finishedPlayers.last;
+            }
+          }
         }
       }
 
