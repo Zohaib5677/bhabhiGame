@@ -103,6 +103,7 @@ class FirebaseService {
         'isFirstRound': true,
         'playedCards': [],
         'currentRoundStarter': 0,
+        'winners': [],
       });
     });
   }
@@ -314,6 +315,56 @@ class FirebaseService {
         playerCards: playerCards,
         currentPlayerId: user.uid,
         playerOrder: playerOrder,
+      );
+
+      transaction.update(docRef, updates);
+    });
+  }
+
+  Future<void> takeFullHand(String roomCode) async {
+    final user = _auth.currentUser;
+    if (user == null) throw Exception('Authentication required');
+
+    await _firestore.runTransaction((transaction) async {
+      final docRef = _firestore.collection('game_rooms').doc(roomCode);
+      final doc = await transaction.get(docRef);
+
+      if (doc['status'] != 'started') throw Exception('Game not active');
+      
+      // Check if we're in the middle of a round
+      if (doc['playedCards'] != null && (doc['playedCards'] as List).isNotEmpty) {
+        throw Exception('Cannot take full hand during a round');
+      }
+
+      final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
+        (key, value) => MapEntry(
+          key, 
+          (value as List).map((e) => CardModel.fromJson(e)).toList()
+        ),
+      );
+      final playerOrder = List<String>.from(doc['players']);
+      final winners = List<String>.from(doc['winners'] ?? []);
+
+      // Check if the left player is already a winner (has no cards due to previous take full hand)
+      final currentPlayerIndex = playerOrder.indexOf(user.uid);
+      final leftPlayerIndex = (currentPlayerIndex + 1) % playerOrder.length;
+      final leftPlayerId = playerOrder[leftPlayerIndex];
+      
+      if (winners.contains(leftPlayerId)) {
+        throw Exception('Cannot take cards from a player who is already a winner');
+      }
+
+      // Check if left player has any cards to take
+      final leftPlayerCards = playerCards[leftPlayerId] ?? [];
+      if (leftPlayerCards.isEmpty) {
+        throw Exception('Left player has no cards to take');
+      }
+
+      final updates = BhabhiGameLogic.processTakeFullHand(
+        playerCards: playerCards,
+        currentPlayerId: user.uid,
+        playerOrder: playerOrder,
+        winners: winners,
       );
 
       transaction.update(docRef, updates);

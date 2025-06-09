@@ -21,6 +21,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   late AnimationController _cardAnimationController;
   CardModel? _selectedCard;
   bool _isPlayingCard = false;
+  bool _isTakingFullHand = false;
 
   String get _playerId => _auth.currentUser?.uid ?? '';
   String get _playerName => _auth.currentUser?.displayName ?? 'Player';
@@ -103,6 +104,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     final playedCards = List<dynamic>.from(gameData['playedCards'] ?? []);
     final currentTurn = gameData['currentTurn'] ?? 0;
     final gameStatus = gameData['gameStatus'] ?? 'waiting';
+    final winners = List<String>.from(gameData['winners'] ?? []);
     
     // Safe handling of isFirstRound field - default to true if not exists
     final isFirstRound = gameData.containsKey('isFirstRound') 
@@ -124,6 +126,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     // Determine if this player should start (has Ace of Spades in first round)
     final shouldStartWithAceOfSpades = isFirstRound && hasAceOfSpades && playedCards.isEmpty;
 
+    // Check if current player is a winner (can't play anymore)
+    final isCurrentPlayerWinner = winners.contains(_playerId);
+
+    // Get left player info for "take full hand" functionality
+    final currentPlayerIndex = players.indexOf(_playerId);
+    final leftPlayerIndex = currentPlayerIndex >= 0 ? (currentPlayerIndex + 1) % players.length : -1;
+    final leftPlayerId = leftPlayerIndex >= 0 ? players[leftPlayerIndex] : '';
+    final leftPlayerCards = leftPlayerId.isNotEmpty ? (playerCards[leftPlayerId] as List?)?.length ?? 0 : 0;
+    final isLeftPlayerWinner = leftPlayerId.isNotEmpty ? winners.contains(leftPlayerId) : false;
+
+    // Check if "take full hand" is available
+    final canTakeFullHand = !isCurrentPlayerWinner && 
+                           leftPlayerId.isNotEmpty && 
+                           !isLeftPlayerWinner && 
+                           leftPlayerCards > 0 && 
+                           playedCards.isEmpty; // Only when not in the middle of a round
+
     if (gameStatus == 'ended') {
       return _buildGameEndScreen(gameData);
     }
@@ -144,13 +163,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 _buildTable(),
                 
                 // Players around table
-                ..._buildPlayersAroundTable(players, playerNames, playerCards, currentTurn),
+                ..._buildPlayersAroundTable(players, playerNames, playerCards, currentTurn, winners),
                 
                 // Center played cards
                 _buildCenterCards(playedCards, isFirstRound, shouldStartWithAceOfSpades),
                 
                 // Current player's hand at bottom
-                _buildPlayerHand(myCards, isMyTurn, shouldStartWithAceOfSpades),
+                _buildPlayerHand(myCards, isMyTurn, shouldStartWithAceOfSpades, isCurrentPlayerWinner),
               ],
             ),
           ),
@@ -160,7 +179,8 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         _buildTopBar(isFirstRound),
         
         // Action buttons
-        if (isMyTurn || shouldStartWithAceOfSpades) _buildActionButtons(shouldStartWithAceOfSpades),
+        if (!isCurrentPlayerWinner && (isMyTurn || shouldStartWithAceOfSpades || canTakeFullHand)) 
+          _buildActionButtons(shouldStartWithAceOfSpades, canTakeFullHand, leftPlayerId, playerNames),
       ],
     );
   }
@@ -168,6 +188,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   Widget _buildGameEndScreen(Map<String, dynamic> gameData) {
     final winner = gameData['winner'];
     final bhabhi = gameData['bhabhi'];
+    final winners = List<String>.from(gameData['winners'] ?? []);
     final playerNames = Map<String, String>.from(gameData['playerNames'] ?? {});
     
     return Center(
@@ -200,13 +221,36 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             const SizedBox(height: 24),
             if (winner != null) ...[
               Text(
-                '🏆 Winner: ${playerNames[winner] ?? "Unknown"}',
+                '🏆 Final Winner: ${playerNames[winner] ?? "Unknown"}',
                 style: const TextStyle(
                   color: Colors.green,
                   fontSize: 24,
                   fontWeight: FontWeight.bold,
                 ),
               ),
+              const SizedBox(height: 12),
+            ],
+            if (winners.isNotEmpty) ...[
+              const Text(
+                '👑 All Winners:',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              ...winners.map((winnerId) => Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Text(
+                  '✨ ${playerNames[winnerId] ?? "Unknown"}',
+                  style: const TextStyle(
+                    color: Color(0xFFD4AF37),
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              )).toList(),
               const SizedBox(height: 12),
             ],
             if (bhabhi != null) ...[
@@ -294,6 +338,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     Map<String, String> playerNames,
     Map<String, dynamic> playerCards,
     int currentTurn,
+    List<String> winners,
   ) {
     List<Widget> playerWidgets = [];
     final centerX = 225.0; // Adjusted for larger table
@@ -329,7 +374,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         Positioned(
           left: x - 50,
           top: y - 40,
-          child: _buildPlayerAvatar(playerName, cardCount, isCurrentPlayer, angle),
+          child: _buildPlayerAvatar(playerName, cardCount, isCurrentPlayer, angle, winners.contains(playerId)),
         ),
       );
     }
@@ -337,26 +382,43 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     return playerWidgets;
   }
 
-  Widget _buildPlayerAvatar(String name, int cardCount, bool isCurrentTurn, double angle) {
+  Widget _buildPlayerAvatar(String name, int cardCount, bool isCurrentTurn, double angle, bool isWinner) {
     // Ensure we display a proper name
     final displayName = name.isNotEmpty ? name : 'Player';
     
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Player cards (back of cards)
-        if (cardCount > 0) _buildPlayerCardFan(cardCount, angle),
+        // Player cards (back of cards) - don't show if winner
+        if (cardCount > 0 && !isWinner) _buildPlayerCardFan(cardCount, angle),
         
-        const SizedBox(height: 8),
+        // Winner crown if player is a winner
+        if (isWinner) ...[
+          const Icon(
+            Icons.emoji_events,
+            color: Color(0xFFD4AF37),
+            size: 30,
+          ),
+          const SizedBox(height: 4),
+        ] else
+          const SizedBox(height: 8),
         
         // Player info
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: isCurrentTurn ? const Color(0xFFD4AF37) : const Color(0xFF8B4513),
+            color: isWinner 
+                ? const Color(0xFFD4AF37) 
+                : isCurrentTurn 
+                    ? const Color(0xFFD4AF37) 
+                    : const Color(0xFF8B4513),
             borderRadius: BorderRadius.circular(15),
             border: Border.all(
-              color: isCurrentTurn ? Colors.white : Colors.transparent,
+              color: isWinner 
+                  ? Colors.white 
+                  : isCurrentTurn 
+                      ? Colors.white 
+                      : Colors.transparent,
               width: 2,
             ),
             boxShadow: [
@@ -373,7 +435,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               Text(
                 displayName,
                 style: TextStyle(
-                  color: isCurrentTurn ? Colors.black : Colors.white,
+                  color: (isWinner || isCurrentTurn) ? Colors.black : Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.bold,
                 ),
@@ -382,10 +444,11 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
               ),
               const SizedBox(height: 2),
               Text(
-                '$cardCount cards',
+                isWinner ? 'Winner!' : '$cardCount cards',
                 style: TextStyle(
-                  color: isCurrentTurn ? Colors.black54 : Colors.white70,
+                  color: (isWinner || isCurrentTurn) ? Colors.black54 : Colors.white70,
                   fontSize: 10,
+                  fontWeight: isWinner ? FontWeight.bold : FontWeight.normal,
                 ),
               ),
             ],
@@ -594,7 +657,75 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildPlayerHand(List<CardModel> myCards, bool isMyTurn, bool shouldStartWithAceOfSpades) {
+  // Add this method to sort cards by suit and value
+  List<CardModel> _sortCards(List<CardModel> cards) {
+    // Define suit order: Spades, Hearts, Diamonds, Clubs
+    final suitOrder = ['SPADES', 'HEARTS', 'DIAMONDS', 'CLUBS'];
+    
+    return cards..sort((a, b) {
+      // First sort by suit
+      final suitComparison = suitOrder.indexOf(a.suit).compareTo(suitOrder.indexOf(b.suit));
+      if (suitComparison != 0) return suitComparison;
+      
+      // Then sort by numeric value (ascending order)
+      return a.numericValue.compareTo(b.numericValue);
+    });
+  }
+
+  Widget _buildPlayerHand(List<CardModel> myCards, bool isMyTurn, bool shouldStartWithAceOfSpades, bool isCurrentPlayerWinner) {
+    // If the current player is a winner, show a special winner display
+    if (isCurrentPlayerWinner) {
+      return Positioned(
+        bottom: 30,
+        left: 0,
+        right: 0,
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: const Color(0xFFD4AF37),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.emoji_events,
+                  color: Colors.white,
+                  size: 40,
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'You are a Winner!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Your hand was taken by another player',
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     if (myCards.isEmpty) {
       return const Positioned(
         bottom: 30,
@@ -608,6 +739,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
       );
     }
+
+    // Sort the cards before displaying
+    final sortedCards = _sortCards(List<CardModel>.from(myCards));
 
     // Get current player's name for display
     final currentPlayerName = _playerName.isNotEmpty ? _playerName : 'You';
@@ -646,7 +780,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '$currentPlayerName (${myCards.length} cards)',
+                  '$currentPlayerName (${sortedCards.length} cards)',
                   style: const TextStyle(
                     color: Colors.black,
                     fontSize: 12,
@@ -660,9 +794,9 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                 height: 100,
                 child: Center(
                   child: SizedBox(
-                    width: math.min(myCards.length * 25.0 + 60, MediaQuery.of(context).size.width - 60),
+                    width: math.min(sortedCards.length * 25.0 + 60, MediaQuery.of(context).size.width - 60),
                     child: Stack(
-                      children: myCards.asMap().entries.map((entry) {
+                      children: sortedCards.asMap().entries.map((entry) {
                         final index = entry.key;
                         final card = entry.value;
                         final isSelected = _selectedCard?.code == card.code && 
@@ -680,7 +814,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
                             canPlayCard = true; // Any card in first round
                           } else if (leadSuit != null) {
                             // Must follow suit if you have it
-                            final hasLeadSuit = myCards.any((c) => c.suit == leadSuit);
+                            final hasLeadSuit = sortedCards.any((c) => c.suit == leadSuit);
                             canPlayCard = hasLeadSuit ? card.suit == leadSuit : true;
                           } else {
                             canPlayCard = true;
@@ -738,12 +872,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
       child: Stack(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: ColorFiltered(
-              colorFilter: canPlayCard 
-                  ? const ColorFilter.mode(Colors.transparent, BlendMode.multiply)
-                  : ColorFilter.mode(Colors.grey.shade400, BlendMode.saturation),
+          Transform.rotate(
+            angle: math.pi, // 180 degrees rotation
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
               child: Image.network(
                 card.image,
                 fit: BoxFit.cover,
@@ -859,13 +991,32 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildActionButtons(bool shouldStartWithAceOfSpades) {
+  Widget _buildActionButtons(bool shouldStartWithAceOfSpades, bool canTakeFullHand, String leftPlayerId, Map<String, String> playerNames) {
     return Positioned(
       bottom: 120,
       right: 30,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (canTakeFullHand) ...[
+            FloatingActionButton.extended(
+              heroTag: "take_full_hand",
+              onPressed: _isTakingFullHand ? null : () => _takeFullHand(leftPlayerId, playerNames),
+              backgroundColor: const Color(0xFF4CAF50),
+              icon: _isTakingFullHand
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(Icons.swap_horiz, color: Colors.white),
+              label: Text(
+                _isTakingFullHand ? 'Taking...' : 'Take Full Hand',
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           if (_selectedCard != null)
             FloatingActionButton.extended(
               heroTag: "play_card",
@@ -936,6 +1087,28 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       });
     } catch (e) {
       setState(() => _isPlayingCard = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _takeFullHand(String leftPlayerId, Map<String, String> playerNames) async {
+    setState(() => _isTakingFullHand = true);
+    
+    try {
+      await _firebaseService.takeFullHand(widget.roomCode);
+      setState(() => _isTakingFullHand = false);
+      _cardAnimationController.forward().then((_) {
+        _cardAnimationController.reset();
+      });
+    } catch (e) {
+      setState(() => _isTakingFullHand = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

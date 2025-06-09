@@ -146,6 +146,43 @@ class BhabhiGameLogic {
     };
   }
 
+  static Map<String, dynamic> processTakeFullHand({
+    required Map<String, List<CardModel>> playerCards,
+    required String currentPlayerId,
+    required List<String> playerOrder,
+    required List<String> winners,
+  }) {
+    final currentPlayerIndex = playerOrder.indexOf(currentPlayerId);
+    final leftPlayerIndex = (currentPlayerIndex + 1) % playerOrder.length;
+    final leftPlayerId = playerOrder[leftPlayerIndex];
+
+    // Current player takes all cards from left player
+    final leftPlayerCards = playerCards[leftPlayerId] ?? [];
+    final currentPlayerCards = playerCards[currentPlayerId] ?? [];
+    
+    // Add left player's cards to current player's hand
+    playerCards[currentPlayerId] = [...currentPlayerCards, ...leftPlayerCards];
+    
+    // Left player now has no cards and becomes a winner
+    playerCards[leftPlayerId] = [];
+    
+    // Add left player to winners list if not already there
+    final updatedWinners = List<String>.from(winners);
+    if (!updatedWinners.contains(leftPlayerId)) {
+      updatedWinners.add(leftPlayerId);
+    }
+
+    return {
+      'playerCards': playerCards.map(
+        (key, value) => MapEntry(key, value.map((c) => c.toJson()).toList()),
+      ),
+      'winners': updatedWinners,
+      'lastAction': 'take_full_hand',
+      'lastActionPlayer': currentPlayerId,
+      'lastActionTarget': leftPlayerId,
+    };
+  }
+
   static bool checkGameEnd(Map<String, List<CardModel>> playerCards) {
     final playersWithCards = playerCards.values.where((hand) => hand.isNotEmpty).length;
     return playersWithCards <= 1;
