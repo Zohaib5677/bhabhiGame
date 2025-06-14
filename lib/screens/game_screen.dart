@@ -176,11 +176,23 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
         
         // Top bar with room info
-        _buildTopBar(isFirstRound),
+        Positioned(
+          top: 12,
+          left: 12,
+          child: ClipOval(
+            child: Material(
+              color: Colors.black.withOpacity(0.3),
+              child: IconButton(
+                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+                onPressed: () => Navigator.pop(context),
+                tooltip: 'Back',
+              ),
+            ),
+          ),
+        ),
         
         // Action buttons
-        if (!isCurrentPlayerWinner && (isMyTurn || shouldStartWithAceOfSpades || canTakeFullHand)) 
-          _buildActionButtons(shouldStartWithAceOfSpades, canTakeFullHand, leftPlayerId, playerNames),
+        _buildActionButtons(shouldStartWithAceOfSpades, canTakeFullHand, leftPlayerId, playerNames),
       ],
     );
   }
@@ -939,107 +951,57 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildTopBar(bool isFirstRound) {
-    return Positioned(
-      top: 0,
-      left: 0,
-      right: 0,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Reduced padding
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.4),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(15), // Reduced radius
-            bottomRight: Radius.circular(15),
-          ),
-        ),
-        child: Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 24), // Smaller icon
-              onPressed: () => Navigator.pop(context),
-              padding: const EdgeInsets.all(4), // Reduced padding
-            ),
-            const SizedBox(width: 8),
-            Text(
-              'Room: ${widget.roomCode}',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16, // Reduced font size
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Reduced padding
-              decoration: BoxDecoration(
-                color: isFirstRound ? Colors.orange : Colors.blue,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                isFirstRound ? 'First Round' : 'Regular Play',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12, // Reduced font size
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildActionButtons(bool shouldStartWithAceOfSpades, bool canTakeFullHand, String leftPlayerId, Map<String, String> playerNames) {
     return Positioned(
-      bottom: 120,
-      right: 30,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      bottom: 120, // Position above the player's hand
+      left: 0,
+      right: 0,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          if (canTakeFullHand) ...[
-            FloatingActionButton.extended(
-              heroTag: "take_full_hand",
-              onPressed: _isTakingFullHand ? null : () => _takeFullHand(leftPlayerId, playerNames),
-              backgroundColor: const Color(0xFF4CAF50),
-              icon: _isTakingFullHand
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Icon(Icons.swap_horiz, color: Colors.white),
-              label: Text(
-                _isTakingFullHand ? 'Taking...' : 'Take Full Hand',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          // Swap button on the left
+          if (canTakeFullHand)
+            Padding(
+              padding: const EdgeInsets.only(left: 20),
+              child: FloatingActionButton(
+                heroTag: "swap_cards",
+                onPressed: _isTakingFullHand ? null : () => _takeFullHand(leftPlayerId),
+                backgroundColor: const Color(0xFFD4AF37),
+                mini: true,
+                child: _isTakingFullHand
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.swap_horiz, color: Colors.black, size: 20),
               ),
-            ),
-            const SizedBox(height: 12),
-          ],
+            )
+          else
+            const SizedBox(width: 60), // Placeholder to maintain layout
+
+          // Play card button on the right
           if (_selectedCard != null)
-            FloatingActionButton.extended(
-              heroTag: "play_card",
-              onPressed: _isPlayingCard ? null : () => _playSelectedCard(shouldStartWithAceOfSpades),
-              backgroundColor: shouldStartWithAceOfSpades 
-                  ? Colors.orange 
-                  : const Color(0xFFD4AF37),
-              icon: _isPlayingCard
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.play_arrow, color: Colors.black),
-              label: Text(
-                _isPlayingCard 
-                    ? 'Playing...' 
-                    : shouldStartWithAceOfSpades 
-                        ? 'Start Game' 
-                        : 'Play Card',
-                style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+            Padding(
+              padding: const EdgeInsets.only(right: 20),
+              child: FloatingActionButton(
+                heroTag: "play_card",
+                onPressed: _isPlayingCard ? null : () => _playSelectedCard(shouldStartWithAceOfSpades),
+                backgroundColor: shouldStartWithAceOfSpades 
+                    ? Colors.orange 
+                    : const Color(0xFFD4AF37),
+                mini: true,
+                child: _isPlayingCard
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.play_arrow, color: Colors.black, size: 20),
               ),
-            ),
+            )
+          else
+            const SizedBox(width: 60), // Placeholder to maintain layout
         ],
       ),
     );
@@ -1098,7 +1060,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _takeFullHand(String leftPlayerId, Map<String, String> playerNames) async {
+  Future<void> _takeFullHand(String leftPlayerId) async {
     setState(() => _isTakingFullHand = true);
     
     try {
