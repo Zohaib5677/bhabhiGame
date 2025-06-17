@@ -696,7 +696,7 @@ Widget _buildRuleItem(String text) {
       left: 180,
       top: 100,
       child: SizedBox(
-        width: 140,
+        width: 180, // Increased width to accommodate more cards
         height: 120,
         child: Column(
           children: [
@@ -728,8 +728,8 @@ Widget _buildRuleItem(String text) {
                   final card = CardModel.fromJson(cardData);
                   
                   return Positioned(
-                    left: index * 12.0,
-                    top: index * 4.0,
+                    left: index * 20.0, // Increased horizontal offset
+                    top: index * 6.0,   // Increased vertical offset
                     child: _buildPlayedCard(card),
                   );
                 }).toList(),
