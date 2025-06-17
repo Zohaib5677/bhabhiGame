@@ -99,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const Positioned(
                         bottom: 20,
                         child: Text(
-                          'BHABHI',
+                          'GETWAY',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -129,8 +129,8 @@ class _LoginScreenState extends State<LoginScreen> {
                       children: [
                         Image.asset(
                           'assets/google_logo.png',
-                          height: 24,
-                          width: 24,
+                          height: 32,
+                          width: 32,
                         ),
                         const SizedBox(width: 10),
                         const Text(
@@ -160,7 +160,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.person_outline),
+                        Icon(Icons.person_outline, color: Colors.white, size: 32),
                         const SizedBox(width: 10),
                         const Text(
                           'Play as Guest',

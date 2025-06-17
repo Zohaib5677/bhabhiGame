@@ -26,6 +26,13 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
   String get _playerId => _auth.currentUser?.uid ?? '';
   String get _playerName => _auth.currentUser?.displayName ?? 'Player';
 
+  bool _showRules = false;
+  void _toggleRules() {
+  setState(() {
+    _showRules = !_showRules;
+  });
+}
+
   @override
   void initState() {
     super.initState();
@@ -151,7 +158,10 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       children: [
         // Background pattern
         _buildBackgroundPattern(),
-        
+      
+// Rules overlay - add this right after background
+
+// ... rest of your Stack children
         // Main game area - optimized for landscape
         Center(
           child: SizedBox(
@@ -176,21 +186,125 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
         ),
         
         // Top bar with room info
-        Positioned(
-          top: 12,
-          left: 12,
-          child: ClipOval(
-            child: Material(
-              color: Colors.black.withOpacity(0.3),
-              child: IconButton(
-                icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
-                onPressed: () => Navigator.pop(context),
-                tooltip: 'Back',
-              ),
+       // Top bar with back button and rules button
+Positioned(
+  top: 12,
+  left: 12,
+  right: 12,
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      ClipOval(
+        child: Material(
+          color: Colors.black.withOpacity(0.3),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white, size: 26),
+            onPressed: () => Navigator.pop(context),
+            tooltip: 'Back',
+          ),
+        ),
+      ),
+      ClipOval(
+        child: Material(
+          color: Colors.black.withOpacity(0.3),
+          child: IconButton(
+            icon: const Icon(Icons.info_outline, color: Colors.white, size: 26),
+            onPressed: _toggleRules,
+            tooltip: 'Game Rules',
+          ),
+        ),
+      ),
+    ],
+  ),
+),
+        
+// Rules overlay - add this as the LAST child in your Stack
+if (_showRules)
+  Positioned.fill(
+    child: GestureDetector(
+      onTap: _toggleRules,
+      child: Container(
+        color: Colors.black.withOpacity(0.7),
+        child: Center(
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.8,
+            height: MediaQuery.of(context).size.height * 0.7, // Fixed height
+            decoration: BoxDecoration(
+              color: const Color(0xFF8B4513),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFD4AF37), width: 2),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.5),
+                  blurRadius: 20,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header with title and close button
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4AF37),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Text(
+                        'Game Rules',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.black),
+                        onPressed: _toggleRules,
+                      ),
+                    ],
+                  ),
+                ),
+                
+                // Scrollable content area
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildRuleItem('🔄 Play proceeds clockwise. Start with Ace of Spades.'),
+                        _buildRuleItem('♠️ Follow suit if possible. Highest card wins the round.'),
+                        _buildRuleItem('🌟 First round: All cards discarded regardless of suit.'),
+                        _buildRuleItem('🔄 Hand Swap: Take left player\'s hand anytime (not mid-round).'),
+                        _buildRuleItem('🏆 No cards to lead? You win! Next player leads.'),
+                        _buildRuleItem('🔫 Shoot-Out: Last 2 players? Special endgame rules apply.'),
+                        const SizedBox(height: 16),
+                        _buildRuleItem('📌 Remember: The player who gets rid of all cards first wins!'),
+                        _buildRuleItem('📌 Last player with cards becomes the "Bhabhi" (looser).'),
+                      ],
+                    ),
+                  ),
+                ),
+                
+                // Footer
+                
+              ],
             ),
           ),
         ),
-        
+      ),
+    ),
+  ),
+
         // Action buttons
         _buildActionButtons(shouldStartWithAceOfSpades, canTakeFullHand, leftPlayerId, playerNames),
       ],
@@ -267,7 +381,7 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
             ],
             if (bhabhi != null) ...[
               Text(
-                '😅 Bhabhi: ${playerNames[bhabhi] ?? "Unknown"}',
+                '😅 Looser: ${playerNames[bhabhi] ?? "Unknown"}',
                 style: const TextStyle(
                   color: Colors.red,
                   fontSize: 20,
@@ -292,7 +406,27 @@ class _GameScreenState extends State<GameScreen> with TickerProviderStateMixin {
       ),
     );
   }
-
+Widget _buildRuleItem(String text) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 6),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 15,
+              height: 1.3,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
   Widget _buildBackgroundPattern() {
     return Container(
       decoration: const BoxDecoration(

@@ -255,7 +255,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> with TickerProvider
                         ),
                       ),
                       Text(
-                        'BHABHI',
+                        'GETWAY',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 10,

@@ -82,7 +82,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           Icon(Icons.spa, color: Color(0xFFE94560)),
                           SizedBox(width: 8),
                           Text(
-                            'BHABHI',
+                            'GETWAY',
                             style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,

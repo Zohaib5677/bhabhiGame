@@ -39,6 +39,7 @@ flutter:
   assets:
     - assets/card_back.png
     - assets/google_logo.png
+    - assets/deck2.webp
   fonts:
     - family: Poppins
       fonts:
