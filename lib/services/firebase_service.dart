@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../models/card_model.dart';
 import 'game_logic.dart';
 import 'dart:math';
+import 'dart:async';
 
 class FirebaseService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -112,13 +113,22 @@ class FirebaseService {
     final user = _auth.currentUser;
     if (user == null) throw Exception('Authentication required');
 
+    bool shouldDelayRoundEnd = false;
+    Map<String, dynamic>? delayedRoundParams;
+
     await _firestore.runTransaction((transaction) async {
       final docRef = _firestore.collection('game_rooms').doc(roomCode);
       final doc = await transaction.get(docRef);
 
-      // Special handling for Ace of Spades in first round
-      final isFirstRound = doc['isFirstRound'] ?? true;
-      final playedCards = List<dynamic>.from(doc['playedCards'] ?? []);
+      // Defensive: fallback to empty/defaults if any field is missing
+      final docPlayerCards = doc['playerCards'] as Map<String, dynamic>? ?? {};
+      final docPlayedCards = doc['playedCards'] as List? ?? [];
+      final docIsFirstRound = doc['isFirstRound'] ?? true;
+      final docCurrentRoundStarter = doc['currentRoundStarter'] ?? 0;
+      final docPlayerOrder = doc['players'] as List? ?? [];
+
+      final isFirstRound = docIsFirstRound;
+      final playedCards = List<dynamic>.from(docPlayedCards);
       final isAceOfSpades = card.code == 'AS' || (card.value == 'ACE' && card.suit == 'SPADES');
       final isFirstCardOfGame = isFirstRound && playedCards.isEmpty;
       
@@ -130,7 +140,7 @@ class FirebaseService {
         if (doc['status'] != 'started') throw Exception('Game not active');
       }
 
-      final playerCards = (doc['playerCards'] as Map<String, dynamic>).map<String, List<CardModel>>(
+      final playerCards = docPlayerCards.map<String, List<CardModel>>(
         (key, value) => MapEntry(
           key, 
           (value as List).map((e) => CardModel.fromJson(e)).toList()
@@ -155,8 +165,8 @@ class FirebaseService {
 
       playedCards.add(card.toJson());
 
-      final playerOrder = List<String>.from(doc['players']);
-      final currentTurn = doc['currentTurn'] as int;
+      final playerOrder = List<String>.from(docPlayerOrder);
+      final currentTurn = (doc['currentTurn'] ?? 0) as int;
       
       // For Ace of Spades first play, set the current turn to the player who played it
       final nextTurn = isFirstCardOfGame && isAceOfSpades 
@@ -166,7 +176,7 @@ class FirebaseService {
       // Get the round starter - either existing or the current player if first card
       final currentRoundStarter = isFirstCardOfGame 
           ? playerOrder.indexOf(user.uid)
-          : (doc['currentRoundStarter'] as int? ?? 0);
+          : (docCurrentRoundStarter as int? ?? 0);
       
       // Check if round should end early due to someone not following suit
       // This happens when a player plays out of suit but they DO have cards of the lead suit
@@ -202,66 +212,109 @@ class FirebaseService {
       }
 
       if (roundComplete) {
-        final playedCardsModels = playedCards.map((e) => CardModel.fromJson(e)).toList();
-        final discardPile = List<CardModel>.from(
-          (doc['discardPile'] as List).map((e) => CardModel.fromJson(e)));
-        
-        // Create proper mapping of players to their played cards
-        // Each player plays one card in order starting from round starter
-        final playedCardsMap = <String, CardModel>{};
-        for (int i = 0; i < playedCardsModels.length; i++) {
-          final playerIndex = (currentRoundStarter + i) % playerOrder.length;
-          playedCardsMap[playerOrder[playerIndex]] = playedCardsModels[i];
-        }
-        
-        final roundWinner = BhabhiGameLogic.determineRoundWinner(
-          playedCards: playedCardsMap,
-          leadPlayerId: playerOrder[currentRoundStarter],
-          leadSuit: leadSuit,
-          isFirstRound: isFirstRound,
-        );
-
-        if (roundWinner != null) {
-          final roundUpdates = BhabhiGameLogic.processRoundEnd(
-            playerCards: playerCards,
-            playedCards: playedCardsModels,
-            roundWinnerId: roundWinner,
-            isFirstRound: isFirstRound,
-            discardPile: discardPile,
-            playerOrder: playerOrder,
-          );
-          updates.addAll(roundUpdates);
-        }
-
-        if (BhabhiGameLogic.checkGameEnd(playerCards)) {
-          updates['gameStatus'] = 'ended';
-          updates['endedAt'] = FieldValue.serverTimestamp();
-          
-          // Determine winner and bhabhi
-          final playersWithCards = playerCards.entries
-              .where((entry) => entry.value.isNotEmpty)
-              .toList();
-          
-          if (playersWithCards.isEmpty) {
-            // Everyone finished at the same time - last player to finish wins
-            updates['winner'] = roundWinner;
-          } else if (playersWithCards.length == 1) {
-            // One player left with cards - they are the bhabhi
-            updates['bhabhi'] = playersWithCards.first.key;
-            // Winner is the player who just finished their cards
-            final finishedPlayers = playerCards.entries
-                .where((entry) => entry.value.isEmpty)
-                .map((entry) => entry.key)
-                .toList();
-            if (finishedPlayers.isNotEmpty) {
-              updates['winner'] = finishedPlayers.last;
-            }
-          }
-        }
+        // Instead of processing the round immediately, set roundEnding: true and delay the round end
+        updates['roundEnding'] = true;
+        shouldDelayRoundEnd = true;
+        delayedRoundParams = {
+          'roomCode': roomCode,
+          'playerCards': playerCards,
+          'playedCards': playedCards,
+          'isFirstRound': isFirstRound,
+          'currentRoundStarter': currentRoundStarter,
+          'playerOrder': playerOrder,
+        };
       }
 
       transaction.update(docRef, updates);
     });
+
+    // If roundComplete, process the round after a delay
+    if (shouldDelayRoundEnd && delayedRoundParams != null) {
+      await Future.delayed(const Duration(seconds: 1));
+      await _processRoundEndAfterDelay(
+        delayedRoundParams!['roomCode'],
+        delayedRoundParams!['playerCards'],
+        delayedRoundParams!['playedCards'],
+        delayedRoundParams!['isFirstRound'],
+        delayedRoundParams!['currentRoundStarter'],
+        delayedRoundParams!['playerOrder'],
+      );
+    }
+  }
+
+  Future<void> _processRoundEndAfterDelay(
+    String roomCode,
+    Map<String, List<CardModel>> playerCards,
+    List playedCards,
+    bool isFirstRound,
+    int currentRoundStarter,
+    List<String> playerOrder,
+  ) async {
+    // Fetch the latest document to get discard pile and other info
+    final docRef = _firestore.collection('game_rooms').doc(roomCode);
+    final docSnap = await docRef.get();
+    if (!docSnap.exists) return;
+    final doc = docSnap.data()!;
+
+    // Only get discardPile from Firestore, use parameters for the rest
+    final docDiscardPile = doc?['discardPile'] as List? ?? [];
+
+    final playedCardsModels = playedCards.map((e) => CardModel.fromJson(e)).toList();
+    final discardPile = List<CardModel>.from(
+      docDiscardPile.map((e) => CardModel.fromJson(e)));
+
+    // Create proper mapping of players to their played cards
+    final playedCardsMap = <String, CardModel>{};
+    for (int i = 0; i < playedCardsModels.length; i++) {
+      final playerIndex = (currentRoundStarter + i) % playerOrder.length;
+      playedCardsMap[playerOrder[playerIndex]] = playedCardsModels[i];
+    }
+
+    final roundWinner = BhabhiGameLogic.determineRoundWinner(
+      playedCards: playedCardsMap,
+      leadPlayerId: playerOrder.isNotEmpty ? playerOrder[currentRoundStarter] : '',
+      leadSuit: playedCardsModels.isNotEmpty ? playedCardsModels.first.suit : null,
+      isFirstRound: isFirstRound,
+    );
+
+    final updates = <String, dynamic>{
+      'roundEnding': FieldValue.delete(),
+    };
+
+    if (roundWinner != null) {
+      final roundUpdates = BhabhiGameLogic.processRoundEnd(
+        playerCards: playerCards,
+        playedCards: playedCardsModels,
+        roundWinnerId: roundWinner,
+        isFirstRound: isFirstRound,
+        discardPile: discardPile,
+        playerOrder: playerOrder,
+      );
+      updates.addAll(roundUpdates);
+    }
+
+    if (BhabhiGameLogic.checkGameEnd(playerCards)) {
+      updates['gameStatus'] = 'ended';
+      updates['endedAt'] = FieldValue.serverTimestamp();
+      // Determine winner and bhabhi
+      final playersWithCards = playerCards.entries
+          .where((entry) => entry.value.isNotEmpty)
+          .toList();
+      if (playersWithCards.isEmpty) {
+        updates['winner'] = roundWinner;
+      } else if (playersWithCards.length == 1) {
+        updates['bhabhi'] = playersWithCards.first.key;
+        final finishedPlayers = playerCards.entries
+            .where((entry) => entry.value.isEmpty)
+            .map((entry) => entry.key)
+            .toList();
+        if (finishedPlayers.isNotEmpty) {
+          updates['winner'] = finishedPlayers.last;
+        }
+      }
+    }
+
+    await docRef.update(updates);
   }
 
   Future<void> drawCard(String roomCode, {int count = 1}) async {
