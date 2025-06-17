@@ -13,7 +13,20 @@
           "package_name": "com.example.bhabi"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "540566410414-0jq4u3pfnk0bftim62upv5qjeqr3hhc0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.bhabi",
+            "certificate_hash": "411be207e850f0186716de734ac40cc4a9b8ffdf"
+          }
+        },
+        {
+          "client_id": "540566410414-pob930o21isa7f50svkbfb97l85sjlq3.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAWE3NwmCeYGW1yfu512KWhuIzZ5i5Q1_U"
@@ -21,7 +34,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "540566410414-pob930o21isa7f50svkbfb97l85sjlq3.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "540566410414-oo8clvtvsbetjfppvrejs61i6aatsttm.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.bhabi"
+              }
+            }
+          ]
         }
       }
     }

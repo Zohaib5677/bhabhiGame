@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/card_model.dart';
 import 'dart:math';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 class BhabhiGameLogic {
   static final Random _random = Random();
@@ -11,18 +13,22 @@ class BhabhiGameLogic {
     required String? leadSuit,
     required bool isFirstRound,
   }) {
+    // Check if player actually has the card they're trying to play
     if (!currentHand.any((c) => c.code == cardToPlay.code && c.suit == cardToPlay.suit)) {
       return false;
     }
 
+    // In first round, any card can be played
     if (isFirstRound) {
       return true;
     }
 
+    // If there's a lead suit and player has cards of that suit, they must follow suit
     if (leadSuit != null && currentHand.any((c) => c.suit == leadSuit)) {
       return cardToPlay.suit == leadSuit;
     }
 
+    // If player has no cards of the lead suit, they can play any card
     return true;
   }
 
@@ -34,35 +40,41 @@ class BhabhiGameLogic {
   }) {
     if (playedCards.isEmpty) return null;
 
+    // In first round, all cards are discarded and the lead player starts next round
     if (isFirstRound) {
       return leadPlayerId;
     }
 
+    // Check if everyone followed the lead suit
     final allFollowedSuit = leadSuit != null && 
         playedCards.values.every((card) => card.suit == leadSuit);
 
     if (allFollowedSuit) {
-      final highestCard = playedCards.values.reduce((highest, card) {
-        return card.suit == leadSuit && card.numericValue > highest.numericValue 
-            ? card : highest;
-      });
+      // Everyone followed suit - highest card of that suit wins
+      final highestCard = playedCards.values
+          .where((card) => card.suit == leadSuit)
+          .reduce((highest, card) {
+            return card.numericValue > highest.numericValue ? card : highest;
+          });
 
       return playedCards.entries
           .firstWhere((entry) => entry.value == highestCard)
           .key;
     } else {
-      if (leadSuit == null) return null;
+      // Someone couldn't follow suit - player with highest card of lead suit wins
+      if (leadSuit == null) return leadPlayerId;
 
-      final leadSuitCards = playedCards.values.where((card) => card.suit == leadSuit);
-      if (leadSuitCards.isEmpty) return null;
+      final leadSuitCards = playedCards.entries
+          .where((entry) => entry.value.suit == leadSuit);
+      
+      if (leadSuitCards.isEmpty) return leadPlayerId;
 
-      final highestLeadCard = leadSuitCards.reduce((highest, card) {
-        return card.numericValue > highest.numericValue ? card : highest;
+      final highestLeadCard = leadSuitCards.reduce((highest, current) {
+        return current.value.numericValue > highest.value.numericValue 
+            ? current : highest;
       });
 
-      return playedCards.entries
-          .firstWhere((entry) => entry.value == highestLeadCard)
-          .key;
+      return highestLeadCard.key;
     }
   }
 
@@ -72,20 +84,26 @@ class BhabhiGameLogic {
     required String roundWinnerId,
     required bool isFirstRound,
     required List<CardModel> discardPile,
+    required List<String> playerOrder,
   }) {
     final updates = <String, dynamic>{};
-    final cardsToDiscard = <CardModel>[];
 
     if (isFirstRound) {
-      cardsToDiscard.addAll(playedCards);
+      // In first round, all cards are always discarded regardless of suit
+      discardPile.addAll(playedCards);
+      updates['discardPile'] = discardPile.map((c) => c.toJson()).toList();
     } else {
+      // In regular rounds, check if everyone followed suit
       final leadSuit = playedCards.isNotEmpty ? playedCards.first.suit : null;
       final allFollowedSuit = leadSuit != null && 
           playedCards.every((card) => card.suit == leadSuit);
 
       if (allFollowedSuit) {
-        cardsToDiscard.addAll(playedCards);
+        // Everyone followed suit - discard all cards
+        discardPile.addAll(playedCards);
+        updates['discardPile'] = discardPile.map((c) => c.toJson()).toList();
       } else {
+        // Someone couldn't follow suit - round winner picks up all cards
         final winnerCards = playerCards[roundWinnerId] ?? [];
         playerCards[roundWinnerId] = [...winnerCards, ...playedCards];
         updates['playerCards'] = playerCards.map(
@@ -94,14 +112,12 @@ class BhabhiGameLogic {
       }
     }
 
-    if (cardsToDiscard.isNotEmpty) {
-      discardPile.addAll(cardsToDiscard);
-      updates['discardPile'] = discardPile.map((c) => c.toJson()).toList();
-    }
-
+    // Clear played cards and set next round starter to the winner
+    final winnerIndex = playerOrder.indexOf(roundWinnerId);
     updates.addAll({
       'playedCards': [],
-      'currentTurn': playerCards.keys.toList().indexOf(roundWinnerId),
+      'currentTurn': winnerIndex,
+      'currentRoundStarter': winnerIndex,
       'isFirstRound': false,
     });
 
@@ -127,6 +143,43 @@ class BhabhiGameLogic {
       ),
       'lastAction': 'hand_swap',
       'lastActionPlayer': currentPlayerId,
+    };
+  }
+
+  static Map<String, dynamic> processTakeFullHand({
+    required Map<String, List<CardModel>> playerCards,
+    required String currentPlayerId,
+    required List<String> playerOrder,
+    required List<String> winners,
+  }) {
+    final currentPlayerIndex = playerOrder.indexOf(currentPlayerId);
+    final leftPlayerIndex = (currentPlayerIndex + 1) % playerOrder.length;
+    final leftPlayerId = playerOrder[leftPlayerIndex];
+
+    // Current player takes all cards from left player
+    final leftPlayerCards = playerCards[leftPlayerId] ?? [];
+    final currentPlayerCards = playerCards[currentPlayerId] ?? [];
+    
+    // Add left player's cards to current player's hand
+    playerCards[currentPlayerId] = [...currentPlayerCards, ...leftPlayerCards];
+    
+    // Left player now has no cards and becomes a winner
+    playerCards[leftPlayerId] = [];
+    
+    // Add left player to winners list if not already there
+    final updatedWinners = List<String>.from(winners);
+    if (!updatedWinners.contains(leftPlayerId)) {
+      updatedWinners.add(leftPlayerId);
+    }
+
+    return {
+      'playerCards': playerCards.map(
+        (key, value) => MapEntry(key, value.map((c) => c.toJson()).toList()),
+      ),
+      'winners': updatedWinners,
+      'lastAction': 'take_full_hand',
+      'lastActionPlayer': currentPlayerId,
+      'lastActionTarget': leftPlayerId,
     };
   }
 
@@ -241,13 +294,36 @@ class BhabhiGameLogic {
 
 class GameLogic {
   static Future<String> createShuffledDeck() async {
-    // Implement actual deck creation logic
-    return 'deck_id';
+    try {
+      final response = await http.get(
+        Uri.parse('https://deckofcardsapi.com/api/deck/new/shuffle/?deck_count=1'),
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['deck_id'] as String;
+      } else {
+        throw Exception('Failed to create shuffled deck');
+      }
+    } catch (e) {
+      throw Exception('Error creating deck: $e');
+    }
   }
 
   static Future<List<CardModel>> drawCards(String deckId, int count) async {
-    // Implement actual card drawing logic
-    return [];
+    try {
+      final response = await http.get(
+        Uri.parse('https://deckofcardsapi.com/api/deck/$deckId/draw/?count=$count'),
+      );
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final cards = data['cards'] as List;
+        return cards.map((card) => CardModel.fromJson(card)).toList();
+      } else {
+        throw Exception('Failed to draw cards');
+      }
+    } catch (e) {
+      throw Exception('Error drawing cards: $e');
+    }
   }
 
   static Map<String, List<CardModel>> distributeAllCards(
@@ -256,13 +332,21 @@ class GameLogic {
   ) {
     final distribution = <String, List<CardModel>>{};
     final cardsPerPlayer = allCards.length ~/ players.length;
+    final shuffledCards = List<CardModel>.from(allCards)..shuffle();
     
     for (var i = 0; i < players.length; i++) {
       final start = i * cardsPerPlayer;
       final end = (i + 1) * cardsPerPlayer;
-      distribution[players[i]] = allCards.sublist(start, end);
+      distribution[players[i]] = shuffledCards.sublist(start, end);
+    }
+    
+    // Distribute any remaining cards
+    final remainingCards = shuffledCards.sublist(players.length * cardsPerPlayer);
+    for (var i = 0; i < remainingCards.length; i++) {
+      distribution[players[i]]!.add(remainingCards[i]);
     }
     
     return distribution;
   }
+
 }
